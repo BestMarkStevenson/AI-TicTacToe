@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic Tac Toe</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for board grid lines */
+        .board-grid {
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 8px; /* Gap between squares */
+        }
+        .board-cell {
+            background-color: #61afef; /* Tailwind's blue-400 equivalent */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 4rem; /* Equivalent to 64px */
+            font-weight: bold;
+            border-radius: 8px; /* Rounded corners */
+            cursor: pointer;
+            transition: background-color 0.2s;
+            position: relative; /* Needed for padding-bottom trick */
+            padding-bottom: 100%; /* Makes height equal to width */
+        }
+        .board-cell-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .board-cell:hover:not(.disabled) {
+            background-color: #56b6c2; /* Darker blue on hover */
+        }
+        .text-red {
+            color: red;
+        }
+        .text-blue {
+            color: blue;
+        }
+        .button-start {
+            @apply px-6 py-3 rounded-lg text-white font-bold transition-all duration-200 ease-in-out shadow-md hover:shadow-lg;
+        }
+        .button-first {
+            @apply bg-green-600 hover:bg-green-700;
+        }
+        .button-second {
+            @apply bg-yellow-600 hover:bg-yellow-700;
+        }
+        .button-disabled {
+            @apply opacity-50 cursor-not-allowed;
+        }
+    </style>
+</head>
+<body class="bg-[#282c34] text-white flex flex-col items-center justify-center min-h-screen p-4 font-inter">
+
+    <div class="max-w-md w-full bg-[#282c34] p-6 rounded-lg shadow-xl">
+        <h1 class="text-4xl font-extrabold text-center mb-6 text-[#e06c75]">Tic Tac Toe</h1>
+
+        <div id="status-label" class="text-center text-lg font-bold mb-6 text-[#e06c75]">Choose who goes first</div>
+
+        <div id="start-options" class="flex justify-around mb-6">
+            <button id="first-button" class="button-start button-first">Go First (X)</button>
+            <button id="second-button" class="button-start button-second">Go Second (O)</button>
+        </div>
+
+        <div id="game-board" class="grid board-grid w-full aspect-square bg-[#2c313a] p-2 rounded-lg shadow-inner">
+            </div>
+
+        <button id="reset-button" class="button-start button-first w-full mt-6 hidden">Reset Game</button>
+    </div>
+
+    <script>
+        // --- Game Logic (Translated from Python) ---
+
+        let currentBoard = ['_', '_', '_', '_', '_', '_', '_', '_', '_'];
+        let humanSymbol = '';
+        let computerSymbol = '';
+        let isPlayerTurn = false; // To control clicks during AI turn
+        let gameEnded = false; // New flag to indicate if the game has ended
+
+        const statusLabel = document.getElementById('status-label');
+        const startOptions = document.getElementById('start-options');
+        const firstButton = document.getElementById('first-button');
+        const secondButton = document.getElementById('second-button');
+        const gameBoard = document.getElementById('game-board');
+        const resetButton = document.getElementById('reset-button');
+
+        // Dynamically create board cells
+        function createBoardCells() {
+            gameBoard.innerHTML = ''; // Clear existing cells
+            for (let i = 0; i < 9; i++) {
+                const cellWrapper = document.createElement('div');
+                cellWrapper.className = 'board-cell';
+                cellWrapper.dataset.index = i;
+                cellWrapper.onclick = () => onCellClick(i);
+
+                const cellContent = document.createElement('div');
+                cellContent.className = 'board-cell-content';
+                cellContent.textContent = ' ';
+                cellWrapper.appendChild(cellContent);
+
+                gameBoard.appendChild(cellWrapper);
+            }
+        }
+
+        function determineCurrentPlayer(board) {
+            let dashCount = 0;
+            for (const value of board) {
+                if (value === '_') {
+                    dashCount++;
+                }
+            }
+            if (dashCount % 2 === 0) {
+                return -1; // 'o' turn
+            } else {
+                return 1; // 'x' turn
+            }
+        }
+
+        function getAvailableMoves(board) {
+            const actionList = [];
+            for (let i = 0; i < board.length; i++) {
+                if (board[i] === '_') {
+                    actionList.push(i);
+                }
+            }
+            return actionList;
+        }
+
+        function applyMove(board, action, playerChar) {
+            const newBoard = [...board]; // Create a copy
+            newBoard[action] = playerChar;
+            return newBoard;
+        }
+
+        function maxValue(board) {
+            let v = -Infinity;
+            const gameStatus = checkGameOver(board);
+            if (gameStatus !== 7) {
+                return gameStatus;
+            }
+
+            for (const action of getAvailableMoves(board)) {
+                v = Math.max(v, minValue(applyMove(board, action, 'x'))); // 'x' is maximizing player
+            }
+            return v;
+        }
+
+        function minValue(board) {
+            let v = Infinity;
+            const gameStatus = checkGameOver(board);
+            if (gameStatus !== 7) {
+                return gameStatus;
+            }
+
+            for (const action of getAvailableMoves(board)) {
+                v = Math.min(v, maxValue(applyMove(board, action, 'o'))); // 'o' is minimizing player
+            }
+            return v;
+        }
+
+        function findBestMove(board, computerSymbol) {
+            let bestAction = null;
+
+            if (computerSymbol === 'x') { // Computer is Maximizing Player
+                let bestScore = -Infinity;
+                for (const action of getAvailableMoves(board)) {
+                    const newBoard = applyMove(board, action, 'x');
+                    const score = minValue(newBoard); // After computer (as 'x') moves, it's opponent's ('o') turn
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestAction = action;
+                    }
+                }
+            } else { // computerSymbol === 'o', Computer is Minimizing Player
+                let bestScore = Infinity;
+                for (const action of getAvailableMoves(board)) {
+                    const newBoard = applyMove(board, action, 'o');
+                    const score = maxValue(newBoard); // After computer (as 'o') moves, it's opponent's ('x') turn
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestAction = action;
+                    }
+                }
+            }
+            return bestAction;
+        }
+
+        function checkGameOver(board) {
+            const winningCombinations = [
+                [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+                [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
+                [0, 4, 8], [2, 4, 6]  // Diagonals
+            ];
+
+            for (const combo of winningCombinations) {
+                const [a, b, c] = combo;
+                if (board[a] === board[b] && board[b] === board[c] && board[a] === 'x') {
+                    return 1; // 'x' wins
+                }
+                if (board[a] === board[b] && board[b] === board[c] && board[a] === 'o') {
+                    return -1; // 'o' wins
+                }
+            }
+
+            if (!board.includes('_')) {
+                return 0; // Tie
+            }
+
+            return 7; // Game is still ongoing
+        }
+
+        // --- GUI Interaction Logic ---
+
+        function updateBoardGUI() {
+            const cells = gameBoard.children;
+            for (let i = 0; i < currentBoard.length; i++) {
+                const cellContent = cells[i].querySelector('.board-cell-content');
+                cellContent.textContent = currentBoard[i] === '_' ? ' ' : currentBoard[i];
+
+                // Remove previous states and click handlers first
+                cells[i].classList.remove('text-red', 'text-blue', 'disabled');
+                cells[i].onclick = null; 
+
+                if (currentBoard[i] === 'x') {
+                    cellContent.classList.add('text-red');
+                    cells[i].classList.add('disabled'); // Add class to prevent hover/click
+                } else if (currentBoard[i] === 'o') {
+                    cellContent.classList.add('text-blue');
+                    cells[i].classList.add('disabled'); // Add class to prevent hover/click
+                } else {
+                    // Only attach click handler if it's an empty cell AND game is not ended AND it's player's turn
+                    if (isPlayerTurn && !gameEnded) {
+                        cells[i].onclick = () => onCellClick(i);
+                        cells[i].classList.remove('disabled'); // Remove disabled class if playable
+                    } else {
+                        cells[i].classList.add('disabled'); // Keep disabled if not player's turn or game ended
+                    }
+                }
+            }
+        }
+
+        function checkGameEnd() {
+            const gameStatus = checkGameOver(currentBoard);
+            if (gameStatus !== 7) {
+                let winnerMessage = "";
+                if (gameStatus === 1) { // 'x' won
+                    winnerMessage = (humanSymbol === 'x') ? "X wins! You are victorious!" : "X wins! The AI wins!";
+                } else if (gameStatus === -1) { // 'o' won
+                    winnerMessage = (humanSymbol === 'o') ? "O wins! You are victorious!" : "O wins! The AI wins!";
+                } else { // Tie
+                    winnerMessage = "It's a Tie!";
+                }
+                statusLabel.textContent = winnerMessage;
+                // Removed the alert(winnerMessage); line
+
+                gameEnded = true; // Set game as ended
+                isPlayerTurn = false; // Game over, disable further clicks
+                disableAllCells(); // Ensure all cells are disabled
+                resetButton.classList.remove('hidden');
+                return true;
+            }
+            return false;
+        }
+
+        function disableAllCells() {
+            const cells = gameBoard.children;
+            for (let i = 0; i < cells.length; i++) {
+                cells[i].onclick = null;
+                cells[i].classList.add('disabled');
+            }
+        }
+
+        function onCellClick(index) {
+            if (currentBoard[index] === '_' && isPlayerTurn && !gameEnded) { // Check gameEnded flag
+                currentBoard[index] = humanSymbol;
+                updateBoardGUI(); // Update GUI immediately after player's move
+                if (!checkGameEnd()) {
+                    isPlayerTurn = false;
+                    statusLabel.textContent = `Computer's turn (${computerSymbol})...`;
+                    disableAllCells(); // Disable cells while AI thinks
+                    setTimeout(computerMakeMove, 750); // AI delay
+                }
+            }
+        }
+
+        function computerMakeMove() {
+            // First, update the GUI to show the board before the AI makes its move
+            updateBoardGUI(); 
+
+            if (checkGameEnd()) {
+                return;
+            }
+
+            const bestMove = findBestMove(currentBoard, computerSymbol);
+            if (bestMove !== null) {
+                currentBoard[bestMove] = computerSymbol;
+                updateBoardGUI(); // Update GUI after AI's move
+                if (!checkGameEnd()) {
+                    isPlayerTurn = true;
+                    statusLabel.textContent = `Your turn (${humanSymbol})`;
+                    updateBoardGUI(); // Re-enable valid cells for player
+                }
+            } else {
+                // This case should ideally only be hit if the game is already over
+                // and no moves are possible.
+                checkGameEnd();
+            }
+        }
+
+        function startGame(humanGoesFirst) {
+            currentBoard = ['_', '_', '_', '_', '_', '_', '_', '_', '_'];
+            gameEnded = false; // Reset gameEnded flag
+            firstButton.classList.add('button-disabled');
+            secondButton.classList.add('button-disabled');
+            firstButton.onclick = null;
+            secondButton.onclick = null;
+            resetButton.classList.add('hidden'); // Hide reset button until game ends
+
+            if (humanGoesFirst) {
+                humanSymbol = 'x';
+                computerSymbol = 'o';
+                isPlayerTurn = true;
+                statusLabel.textContent = `Your turn (X)`;
+            } else {
+                humanSymbol = 'o';
+                computerSymbol = 'x';
+                isPlayerTurn = false;
+                statusLabel.textContent = `Computer's turn (X)...`;
+                setTimeout(computerMakeMove, 750); // AI goes first with a delay
+            }
+            updateBoardGUI(); // Initial update to display board and enable/disable cells correctly
+        }
+
+        function resetGame() {
+            currentBoard = ['_', '_', '_', '_', '_', '_', '_', '_', '_'];
+            gameEnded = false; // Reset gameEnded flag
+            showStartOptions();
+        }
+
+        function showStartOptions() {
+            statusLabel.textContent = "Choose who goes first";
+            statusLabel.classList.remove('text-red', 'text-blue'); // Clear potential winner colors
+            statusLabel.classList.add('text-[#e06c75]'); // Set to default status color
+
+            firstButton.classList.remove('button-disabled');
+            secondButton.classList.remove('button-disabled');
+            firstButton.onclick = () => startGame(true);
+            secondButton.onclick = () => startGame(false);
+            resetButton.classList.add('hidden'); // Hide reset button at start
+            isPlayerTurn = false; // Ensure no clicks are processed before game starts
+
+            createBoardCells(); // Re-create cells and make them initially disabled
+            disableAllCells(); // Ensure all cells are disabled until game starts
+        }
+
+        // Event Listeners for Start/Reset Buttons
+        firstButton.onclick = () => startGame(true);
+        secondButton.onclick = () => startGame(false);
+        resetButton.onclick = resetGame;
+
+        // Initial setup
+        showStartOptions();
+    </script>
+</body>
+</html>
